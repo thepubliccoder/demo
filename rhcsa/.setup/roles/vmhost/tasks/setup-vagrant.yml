@@ -1,0 +1,57 @@
+---
+- name: Ensure vagrant is installed (CentOS)
+  stat:
+    path: "{{ vagrant_install_path }}"
+  register: vagrant_installation
+  changed_when: False
+- name: Download and install Vagrant rpm file (CentOS)
+  package:
+    name: "{{ vagrant_url }}"
+    state: present
+  when: vagrant_installation.stat.isreg is not defined and ansible_distribution == 'CentOS'
+  become: yes
+- name: Ensure vagrant is installed (Debian)
+  apt:
+    name: vagrant
+    state: latest
+  become: yes
+  when: ansible_distribution == 'Debian'
+- name: Test if vagrant-libvirt plugin is already installed (CentOS)
+  command: "vagrant plugin list"
+  register: vagrant_plugin_installed
+  changed_when: False
+- name: Ensure gcc is installed in order to build the vagrant plugin (CentOS)
+  package:
+    name: "{{ item }}"
+    state: present
+  become: yes
+  with_items:
+    - gcc
+    - libvirt-devel
+    - make
+  when: "'vagrant-libvirt' not in vagrant_plugin_installed.stdout and ansible_distribution == 'CentOS'"
+- name: Install vagrant-libvirt plugin (CentOS)
+  command: "vagrant plugin install vagrant-libvirt"
+  when: "'vagrant-libvirt' not in vagrant_plugin_installed.stdout and ansible_distribution == 'CentOS'"
+- name: Ensure vagrant-libvirt is installed (Debian)
+  apt:
+    name: vagrant-libvirt
+    state: latest
+  become: yes
+  when: ansible_distribution == 'Debian'
+- name: Ensure {{ ansible_user_dir }}/keys directory exists
+  file:
+    path: "{{ ansible_user_dir }}/keys"
+    state: directory
+    mode: 0700
+- name: Test if {{ ansible_user_dir }}/keys/vagrant already installed
+  stat:
+    path: "{{ ansible_user_dir }}/keys/vagrant"
+  register: keys_installation
+  changed_when: False
+- name: Ensure key pair in {{ ansible_user_dir }}/keys
+  command: ssh-keygen -t rsa -b 4096 -f vagrant -N "" -C "vagrant public key created by vagrantbox setup"
+  args:
+    chdir: "{{ ansible_user_dir }}/keys"
+    creates: "{{ ansible_user_dir }}/keys/vagrant"
+  when: keys_installation.stat.isreg is not defined
